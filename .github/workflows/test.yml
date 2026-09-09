@@ -309,3 +309,29 @@ jobs:
               exit 1
             fi
           done
+
+  windows-gate-focused:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Record focused comparison environment
+        shell: pwsh
+        run: |
+          git rev-parse HEAD
+          bun --version
+          Write-Output "runner=$env:RUNNER_OS image=$env:ImageOS version=$env:ImageVersion"
+      - name: Run unchanged gate test alone
+        working-directory: packages/cli
+        shell: pwsh
+        run: |
+          $gateProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/commands/workflow-wait.integration.spec.ts --test-name-pattern 'wakes with awaiting_response on a gate'
+          $gateProbeExit = $LASTEXITCODE
+          Write-Output "focused exit=$gateProbeExit elapsedMs=$($gateProbeStarted.ElapsedMilliseconds)"
+          exit $gateProbeExit
