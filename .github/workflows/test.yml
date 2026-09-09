@@ -137,7 +137,7 @@ jobs:
       # drive root, recursively, so nothing under either was being scanned to
       # begin with. `Add-MpPreference` also cost 5s per run to change nothing.
       # Evidence: https://github.com/coleam00/Archon/pull/2943
-      - name: Focused tar, clone and gate before the parallel suite
+      - name: Focused failed families before the parallel suite
         if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
         continue-on-error: true
         working-directory: packages/cli
@@ -153,18 +153,25 @@ jobs:
           $cloneProbeExit = $LASTEXITCODE
           Write-Output "focused-clone exit=$cloneProbeExit elapsedMs=$($cloneProbeStarted.ElapsedMilliseconds)"
           Pop-Location
+          Push-Location ../workflows
+          $subrunProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/subrun.test.ts --test-name-pattern 'GATING child loses the path lock'
+          $subrunProbeExit = $LASTEXITCODE
+          Write-Output "focused-subrun exit=$subrunProbeExit elapsedMs=$($subrunProbeStarted.ElapsedMilliseconds)"
+          Pop-Location
           $gateProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
           bun test src/commands/workflow-wait.integration.spec.ts --test-name-pattern 'wakes with awaiting_response on a gate'
           $gateProbeExit = $LASTEXITCODE
           Write-Output "focused-before exit=$gateProbeExit elapsedMs=$($gateProbeStarted.ElapsedMilliseconds)"
           if ($tarProbeExit -ne 0) { exit $tarProbeExit }
           if ($cloneProbeExit -ne 0) { exit $cloneProbeExit }
+          if ($subrunProbeExit -ne 0) { exit $subrunProbeExit }
           exit $gateProbeExit
 
       - name: Run tests
         run: bun run test
 
-      - name: Focused tar, clone and gate after the parallel suite
+      - name: Focused failed families after the parallel suite
         if: always() && runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
         working-directory: packages/cli
         shell: pwsh
@@ -179,12 +186,19 @@ jobs:
           $cloneProbeExit = $LASTEXITCODE
           Write-Output "focused-clone exit=$cloneProbeExit elapsedMs=$($cloneProbeStarted.ElapsedMilliseconds)"
           Pop-Location
+          Push-Location ../workflows
+          $subrunProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/subrun.test.ts --test-name-pattern 'GATING child loses the path lock'
+          $subrunProbeExit = $LASTEXITCODE
+          Write-Output "focused-subrun exit=$subrunProbeExit elapsedMs=$($subrunProbeStarted.ElapsedMilliseconds)"
+          Pop-Location
           $gateProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
           bun test src/commands/workflow-wait.integration.spec.ts --test-name-pattern 'wakes with awaiting_response on a gate'
           $gateProbeExit = $LASTEXITCODE
           Write-Output "focused-after exit=$gateProbeExit elapsedMs=$($gateProbeStarted.ElapsedMilliseconds)"
           if ($tarProbeExit -ne 0) { exit $tarProbeExit }
           if ($cloneProbeExit -ne 0) { exit $cloneProbeExit }
+          if ($subrunProbeExit -ne 0) { exit $subrunProbeExit }
           exit $gateProbeExit
 
 
@@ -378,7 +392,7 @@ jobs:
           bun --version
           bun -e 'console.log(JSON.stringify({tar: Bun.which("tar"), platform: process.platform}))'
           Write-Output "runner=$env:RUNNER_OS image=$env:ImageOS version=$env:ImageVersion"
-      - name: Run unchanged tar, clone and gate tests alone
+      - name: Run unchanged failed-family tests alone
         working-directory: packages/cli
         shell: pwsh
         run: |
@@ -392,10 +406,17 @@ jobs:
           $cloneProbeExit = $LASTEXITCODE
           Write-Output "focused-clone exit=$cloneProbeExit elapsedMs=$($cloneProbeStarted.ElapsedMilliseconds)"
           Pop-Location
+          Push-Location ../workflows
+          $subrunProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/subrun.test.ts --test-name-pattern 'GATING child loses the path lock'
+          $subrunProbeExit = $LASTEXITCODE
+          Write-Output "focused-subrun exit=$subrunProbeExit elapsedMs=$($subrunProbeStarted.ElapsedMilliseconds)"
+          Pop-Location
           $gateProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
           bun test src/commands/workflow-wait.integration.spec.ts --test-name-pattern 'wakes with awaiting_response on a gate'
           $gateProbeExit = $LASTEXITCODE
           Write-Output "focused exit=$gateProbeExit elapsedMs=$($gateProbeStarted.ElapsedMilliseconds)"
           if ($tarProbeExit -ne 0) { exit $tarProbeExit }
           if ($cloneProbeExit -ne 0) { exit $cloneProbeExit }
+          if ($subrunProbeExit -ne 0) { exit $subrunProbeExit }
           exit $gateProbeExit

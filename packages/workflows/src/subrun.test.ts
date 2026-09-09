@@ -4151,6 +4151,20 @@ nodes:
 // ===========================================================================
 describe('workflow: late resolution is a deliberate affordance', () => {
   let cwd: string;
+  let executionPending = false;
+  const mark = (phase: string, detail?: unknown): void => {
+    console.error(
+      JSON.stringify({
+        diagnostic: 'late-resolution',
+        phase,
+        pid: process.pid,
+        ms: performance.now(),
+        cwd,
+        executionPending,
+        detail,
+      })
+    );
+  };
   const originalArchonHome = process.env.ARCHON_HOME;
 
   async function writeWorkflow(name: string, yaml: string): Promise<void> {
@@ -4177,12 +4191,18 @@ nodes:
 
   beforeEach(async () => {
     cwd = join(tmpdir(), `lateres-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mark('setup-start');
     await mkdir(join(cwd, '.archon', 'workflows'), { recursive: true });
+    mark('setup-end');
     process.env.ARCHON_HOME = join(cwd, 'home');
   });
 
   afterEach(async () => {
-    await rm(cwd, { recursive: true, force: true }).catch(() => {});
+    mark('cleanup-start');
+    await rm(cwd, { recursive: true, force: true }).catch((error: unknown) => {
+      mark('cleanup-error', error instanceof Error ? error.message : String(error));
+    });
+    mark('cleanup-end');
     if (originalArchonHome === undefined) delete process.env.ARCHON_HOME;
     else process.env.ARCHON_HOME = originalArchonHome;
   });
@@ -4591,6 +4611,7 @@ nodes:
     // sites now behave the same way on a lost CAS — a faithful Defect-B test still
     // needs the CAS-aware store double described above, but no longer needs to pick a
     // gate type deliberately for this reason.
+    mark('gate-body-start');
     await writeWorkflow(
       'gating-child',
       `
@@ -4619,8 +4640,12 @@ nodes:
     );
 
     const store = new InMemoryStore();
+    mark('gate-files-written');
     const parent = await discover('parent-fanout-gates');
-    await executeWorkflow(
+    mark('gate-discovery-end');
+    executionPending = true;
+    mark('gate-execution-start');
+    const diagnosticResult = await executeWorkflow(
       makeDeps(store),
       makePlatform(),
       'conv-plat',
@@ -4630,6 +4655,18 @@ nodes:
       'conv-db'
     );
 
+    executionPending = false;
+    mark('gate-execution-end', {
+      result: diagnosticResult,
+      runs: [...store.runs.values()].map(run => ({
+        id: run.id,
+        workflow: run.workflow_name,
+        status: run.status,
+      })),
+      failures: store.events.filter(
+        event => event.event_type === 'node_failed' || event.event_type === 'workflow_failed'
+      ),
+    });
     const parentRun = [...store.runs.values()].find(r => r.workflow_name === 'parent-fanout-gates');
     const children = [...store.runs.values()].filter(r => r.parent_run_id === parentRun?.id);
     // Both children are created, but only ONE survives. The issue body described the
