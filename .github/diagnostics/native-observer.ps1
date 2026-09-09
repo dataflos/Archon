@@ -78,7 +78,17 @@ try {
             catch { Write-ObserverError $metric.field $_ }
         }
         $sampleDuration = $watch.ElapsedMilliseconds - $sampleStart
-        Write-Observation @{ kind = 'sample_completed'; durationMs = $sampleDuration }
+        $observerProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+        try {
+            Write-Observation @{
+                kind = 'sample_completed'
+                durationMs = $sampleDuration
+                observerCpuSeconds = $observerProcess.TotalProcessorTime.TotalSeconds
+                observerWorkingSetBytes = $observerProcess.WorkingSet64
+                observerPrivateMemoryBytes = $observerProcess.PrivateMemorySize64
+            }
+        }
+        finally { $observerProcess.Dispose() }
         $remaining = 1000 - $sampleDuration
         if ($remaining -gt 0) { Start-Sleep -Milliseconds $remaining }
     }
