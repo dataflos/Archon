@@ -135,7 +135,21 @@ jobs:
       # begin with. `Add-MpPreference` also cost 5s per run to change nothing.
       # Evidence: https://github.com/coleam00/Archon/pull/2943
       - name: Run tests
+        if: runner.os != 'Windows'
         run: bun run test
+
+      - name: Capture native process times during Windows tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/diagnostics/run-etw.ps1
+
+      - name: Upload selected native process timing fields
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-etw
+          path: ${{ runner.temp }}/archon-native-etw/export
+          if-no-files-found: error
 
   schema-upgrade:
     needs: changes
