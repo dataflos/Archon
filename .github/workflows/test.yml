@@ -114,12 +114,15 @@ jobs:
         run: bun run check:api-types
 
       - name: Type check
+        if: github.event_name != 'workflow_dispatch'
         run: bun run type-check
 
       - name: Lint
+        if: github.event_name != 'workflow_dispatch'
         run: bun run lint --max-warnings 0
 
       - name: Check formatting
+        if: github.event_name != 'workflow_dispatch'
         run: bun run format:check
 
       - name: Run installer tests
