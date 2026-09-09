@@ -134,8 +134,56 @@ jobs:
       # drive root, recursively, so nothing under either was being scanned to
       # begin with. `Add-MpPreference` also cost 5s per run to change nothing.
       # Evidence: https://github.com/coleam00/Archon/pull/2943
+      - name: Focused tar, clone and gate before the parallel suite
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        working-directory: packages/cli
+        shell: pwsh
+        run: |
+          $tarProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/commands/serve.test.ts --test-name-pattern 'verifies against the embedded hash without fetching checksums.txt'
+          $tarProbeExit = $LASTEXITCODE
+          Write-Output "focused-tar exit=$tarProbeExit elapsedMs=$($tarProbeStarted.ElapsedMilliseconds)"
+          Push-Location ../git
+          $cloneProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun run test --test-name-pattern 'authenticates a real Git clone against an explicit HTTP port'
+          $cloneProbeExit = $LASTEXITCODE
+          Write-Output "focused-clone exit=$cloneProbeExit elapsedMs=$($cloneProbeStarted.ElapsedMilliseconds)"
+          Pop-Location
+          $gateProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/commands/workflow-wait.integration.spec.ts --test-name-pattern 'wakes with awaiting_response on a gate'
+          $gateProbeExit = $LASTEXITCODE
+          Write-Output "focused-before exit=$gateProbeExit elapsedMs=$($gateProbeStarted.ElapsedMilliseconds)"
+          if ($tarProbeExit -ne 0) { exit $tarProbeExit }
+          if ($cloneProbeExit -ne 0) { exit $cloneProbeExit }
+          exit $gateProbeExit
+
       - name: Run tests
         run: bun run test
+
+      - name: Focused tar, clone and gate after the parallel suite
+        if: always() && runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        working-directory: packages/cli
+        shell: pwsh
+        run: |
+          $tarProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/commands/serve.test.ts --test-name-pattern 'verifies against the embedded hash without fetching checksums.txt'
+          $tarProbeExit = $LASTEXITCODE
+          Write-Output "focused-tar exit=$tarProbeExit elapsedMs=$($tarProbeStarted.ElapsedMilliseconds)"
+          Push-Location ../git
+          $cloneProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun run test --test-name-pattern 'authenticates a real Git clone against an explicit HTTP port'
+          $cloneProbeExit = $LASTEXITCODE
+          Write-Output "focused-clone exit=$cloneProbeExit elapsedMs=$($cloneProbeStarted.ElapsedMilliseconds)"
+          Pop-Location
+          $gateProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/commands/workflow-wait.integration.spec.ts --test-name-pattern 'wakes with awaiting_response on a gate'
+          $gateProbeExit = $LASTEXITCODE
+          Write-Output "focused-after exit=$gateProbeExit elapsedMs=$($gateProbeStarted.ElapsedMilliseconds)"
+          if ($tarProbeExit -ne 0) { exit $tarProbeExit }
+          if ($cloneProbeExit -ne 0) { exit $cloneProbeExit }
+          exit $gateProbeExit
+
 
   schema-upgrade:
     needs: changes
@@ -310,7 +358,7 @@ jobs:
             fi
           done
 
-  windows-gate-focused:
+  windows-focused-comparison:
     if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
@@ -325,13 +373,26 @@ jobs:
         run: |
           git rev-parse HEAD
           bun --version
+          bun -e 'console.log(JSON.stringify({tar: Bun.which("tar"), platform: process.platform}))'
           Write-Output "runner=$env:RUNNER_OS image=$env:ImageOS version=$env:ImageVersion"
-      - name: Run unchanged gate test alone
+      - name: Run unchanged tar, clone and gate tests alone
         working-directory: packages/cli
         shell: pwsh
         run: |
+          $tarProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun test src/commands/serve.test.ts --test-name-pattern 'verifies against the embedded hash without fetching checksums.txt'
+          $tarProbeExit = $LASTEXITCODE
+          Write-Output "focused-tar exit=$tarProbeExit elapsedMs=$($tarProbeStarted.ElapsedMilliseconds)"
+          Push-Location ../git
+          $cloneProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
+          bun run test --test-name-pattern 'authenticates a real Git clone against an explicit HTTP port'
+          $cloneProbeExit = $LASTEXITCODE
+          Write-Output "focused-clone exit=$cloneProbeExit elapsedMs=$($cloneProbeStarted.ElapsedMilliseconds)"
+          Pop-Location
           $gateProbeStarted = [System.Diagnostics.Stopwatch]::StartNew()
           bun test src/commands/workflow-wait.integration.spec.ts --test-name-pattern 'wakes with awaiting_response on a gate'
           $gateProbeExit = $LASTEXITCODE
           Write-Output "focused exit=$gateProbeExit elapsedMs=$($gateProbeStarted.ElapsedMilliseconds)"
+          if ($tarProbeExit -ne 0) { exit $tarProbeExit }
+          if ($cloneProbeExit -ne 0) { exit $cloneProbeExit }
           exit $gateProbeExit

@@ -2795,6 +2795,33 @@ branch refs/heads/feature/auth
 
     test('authenticates a real Git clone against an explicit HTTP port', async () => {
       execSpy.mockRestore();
+      const phase = async <T>(label: string, action: () => Promise<T>): Promise<T> => {
+        process.env.ARCHON_DIAG_GIT_PHASE = label;
+        const started = performance.now();
+        console.error(
+          JSON.stringify({
+            diagnostic: 'clone-phase',
+            label,
+            event: 'start',
+            pid: process.pid,
+            ms: started,
+          })
+        );
+        try {
+          return await action();
+        } finally {
+          delete process.env.ARCHON_DIAG_GIT_PHASE;
+          console.error(
+            JSON.stringify({
+              diagnostic: 'clone-phase',
+              label,
+              event: 'end',
+              pid: process.pid,
+              elapsedMs: performance.now() - started,
+            })
+          );
+        }
+      };
       const root = trackTempRoot(await mkdtemp(join(tmpdir(), 'archon-clone-http-auth-')));
       const sourcePath = join(root, 'source');
       const servedPath = join(root, 'served');
@@ -2804,27 +2831,42 @@ branch refs/heads/feature/auth
       const expectedAuthorization = `Basic ${Buffer.from(`oauth2:${token}`).toString('base64')}`;
       const authorizations: Array<string | null> = [];
 
-      await git.execFileAsync('git', ['init', sourcePath]);
-      await git.execFileAsync('git', ['-C', sourcePath, 'config', 'user.name', 'Archon Test']);
-      await git.execFileAsync('git', [
-        '-C',
-        sourcePath,
-        'config',
-        'user.email',
-        'archon@example.test',
-      ]);
+      await phase('fixture-init', () => git.execFileAsync('git', ['init', sourcePath]));
+      await phase('fixture-name', () =>
+        git.execFileAsync('git', ['-C', sourcePath, 'config', 'user.name', 'Archon Test'])
+      );
+      await phase('fixture-email', () =>
+        git.execFileAsync('git', ['-C', sourcePath, 'config', 'user.email', 'archon@example.test'])
+      );
       await writeFile(join(sourcePath, 'README.md'), 'fixture\n');
-      await git.execFileAsync('git', ['-C', sourcePath, 'add', 'README.md']);
-      await git.execFileAsync('git', ['-C', sourcePath, 'commit', '-m', 'fixture']);
+      await phase('fixture-add', () =>
+        git.execFileAsync('git', ['-C', sourcePath, 'add', 'README.md'])
+      );
+      await phase('fixture-commit', () =>
+        git.execFileAsync('git', ['-C', sourcePath, 'commit', '-m', 'fixture'])
+      );
       await realMkdir(servedPath, { recursive: true });
-      await git.execFileAsync('git', ['clone', '--bare', sourcePath, barePath]);
-      await git.execFileAsync('git', ['--git-dir', barePath, 'update-server-info']);
+      await phase('fixture-bare-clone', () =>
+        git.execFileAsync('git', ['clone', '--bare', sourcePath, barePath])
+      );
+      await phase('fixture-server-info', () =>
+        git.execFileAsync('git', ['--git-dir', barePath, 'update-server-info'])
+      );
 
       const server = Bun.serve({
         port: 0,
         async fetch(request) {
           const authorization = request.headers.get('authorization');
           authorizations.push(authorization);
+          console.error(
+            JSON.stringify({
+              diagnostic: 'clone-http',
+              pid: process.pid,
+              ms: performance.now(),
+              authenticated: authorization === expectedAuthorization,
+              path: new URL(request.url).pathname,
+            })
+          );
           if (authorization !== expectedAuthorization) {
             return new Response('authentication required', {
               status: 401,
@@ -2846,19 +2888,17 @@ branch refs/heads/feature/auth
 
       try {
         const url = `http://127.0.0.1:${String(server.port)}/repo.git`;
-        const result = await git.cloneRepository(url, targetPath, {
-          credentials: { username: 'oauth2', password: token },
-        });
+        const result = await phase('application-clone', () =>
+          git.cloneRepository(url, targetPath, {
+            credentials: { username: 'oauth2', password: token },
+          })
+        );
 
         expect(result).toEqual({ ok: true, value: undefined });
         expect(authorizations).toContain(expectedAuthorization);
-        const { stdout: originUrl } = await git.execFileAsync('git', [
-          '-C',
-          targetPath,
-          'remote',
-          'get-url',
-          'origin',
-        ]);
+        const { stdout: originUrl } = await phase('verify-origin', () =>
+          git.execFileAsync('git', ['-C', targetPath, 'remote', 'get-url', 'origin'])
+        );
         expect(originUrl.trim()).toBe(url);
         expect(originUrl).not.toContain(token);
       } finally {
