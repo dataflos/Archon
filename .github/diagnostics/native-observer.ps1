@@ -8,6 +8,27 @@ $ErrorActionPreference = 'Stop'
 $processNames = @('bun', 'git', 'tar', 'bash', 'node')
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
 $writer = $null
+$traceSources = @("archon-start-$PID", "archon-stop-$PID")
+
+function Drain-ProcessEvents {
+    foreach ($source in $traceSources) {
+        foreach ($queued in @(Get-Event -SourceIdentifier $source -ErrorAction SilentlyContinue)) {
+            $native = $queued.SourceEventArgs.NewEvent
+            $isStop = $source -eq $traceSources[1]
+            $entry = @{
+                kind = if ($isStop) { 'native_process_stop' } else { 'native_process_start' }
+                pid = $native.ProcessID
+                parentPid = $native.ParentProcessID
+                name = $native.ProcessName
+                eventFileTime = [string]$native.TIME_CREATED
+                generatedUtc = [DateTime]::FromFileTimeUtc([long]$native.TIME_CREATED).ToString('o')
+            }
+            if ($isStop) { $entry.exitStatus = $native.ExitStatus }
+            Write-Observation $entry
+            Remove-Event -EventIdentifier $queued.EventIdentifier -ErrorAction Stop
+        }
+    }
+}
 
 function Write-Observation([hashtable]$Value) {
     $Value.timestampUtc = [DateTime]::UtcNow.ToString('o')
@@ -31,11 +52,17 @@ try {
     # CreateNew prevents accidentally overwriting another observer's evidence.
     $stream = [System.IO.File]::Open($OutputPath, 'CreateNew', 'Write', 'Read')
     $writer = [System.IO.StreamWriter]::new($stream, [System.Text.UTF8Encoding]::new($false))
+    # Native event timestamps are independent of when this queue is drained.
+    # Include cmd.exe for the known-exit control after the measured suite.
+    $filter = (($processNames + 'cmd') | ForEach-Object { "ProcessName='$_.exe'" }) -join ' OR '
+    Register-CimIndicationEvent -Namespace root/cimv2 -Query "SELECT * FROM Win32_ProcessStartTrace WHERE $filter" -SourceIdentifier $traceSources[0] | Out-Null
+    Register-CimIndicationEvent -Namespace root/cimv2 -Query "SELECT * FROM Win32_ProcessStopTrace WHERE $filter" -SourceIdentifier $traceSources[1] | Out-Null
     [System.IO.File]::WriteAllText($PidPath, [string]$PID)
     Write-Observation @{ kind = 'observer_started'; sampleIntervalMs = 1000; names = $processNames }
 
     while (-not [System.IO.File]::Exists($StopMarker)) {
         $sampleStart = $watch.ElapsedMilliseconds
+        Drain-ProcessEvents
         $processes = @()
         try {
             $processes = @(Get-Process | Where-Object { $processNames -contains $_.ProcessName })
@@ -111,6 +138,13 @@ try {
         $remaining = 1000 - $sampleDuration
         if ($remaining -gt 0) { Start-Sleep -Milliseconds $remaining }
     }
+    # Allow queued provider events to arrive; this is a bounded evidence drain,
+    # not proof that every native termination event has been delivered.
+    for ($attempt = 0; $attempt -lt 5; $attempt++) {
+        Drain-ProcessEvents
+        Start-Sleep -Milliseconds 100
+    }
+    Drain-ProcessEvents
     Write-Observation @{ kind = 'observer_stopped'; reason = 'stop_marker' }
 }
 catch {
@@ -119,5 +153,10 @@ catch {
     exit 1
 }
 finally {
+    foreach ($source in $traceSources) {
+        if (Get-EventSubscriber -SourceIdentifier $source -ErrorAction SilentlyContinue) {
+            Unregister-Event -SourceIdentifier $source
+        }
+    }
     if ($null -ne $writer) { $writer.Dispose() }
 }
