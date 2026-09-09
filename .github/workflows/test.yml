@@ -138,7 +138,21 @@ jobs:
       # begin with. `Add-MpPreference` also cost 5s per run to change nothing.
       # Evidence: https://github.com/coleam00/Archon/pull/2943
       - name: Run tests
+        if: runner.os != 'Windows'
         run: bun run test
+
+      - name: Run Windows tests with operation observations
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/diagnostics/run.ps1
+
+      - name: Upload Windows operation observations
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-class-operations
+          path: ${{ runner.temp }}/archon-class-operations
+          if-no-files-found: error
 
   schema-upgrade:
     needs: changes

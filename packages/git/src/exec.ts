@@ -96,7 +96,48 @@ export async function execFileAsync(
     windowsHide?: boolean;
   }
 ): Promise<{ stdout: string; stderr: string }> {
-  const result = await promisifiedExecFile(cmd, args, { windowsHide: true, ...options });
+  const phase = process.env.ARCHON_DIAG_GIT_PHASE;
+  const started = performance.now();
+  const pending = promisifiedExecFile(cmd, args, { windowsHide: true, ...options });
+  if (phase) {
+    console.error(
+      JSON.stringify({
+        diagnostic: 'clone-child',
+        phase,
+        event: 'spawned',
+        pid: process.pid,
+        childPid: pending.child.pid,
+        elapsedMs: performance.now() - started,
+      })
+    );
+    pending.child.once('exit', (code, signal) => {
+      console.error(
+        JSON.stringify({
+          diagnostic: 'clone-child',
+          phase,
+          event: 'exit',
+          childPid: pending.child.pid,
+          code,
+          signal,
+          elapsedMs: performance.now() - started,
+        })
+      );
+    });
+    pending.child.once('close', (code, signal) => {
+      console.error(
+        JSON.stringify({
+          diagnostic: 'clone-child',
+          phase,
+          event: 'close',
+          childPid: pending.child.pid,
+          code,
+          signal,
+          elapsedMs: performance.now() - started,
+        })
+      );
+    });
+  }
+  const result = await pending;
   // The `.toString()` these two lines used to carry is gone deliberately. Passing an
   // options OBJECT unconditionally (rather than possibly `undefined`) resolves
   // execFile to its string-encoding overload, so both fields are already strings and

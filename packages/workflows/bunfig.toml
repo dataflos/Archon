@@ -1,0 +1,2 @@
+[test]
+preload = ["../../.github/diagnostics/operations.cjs"]

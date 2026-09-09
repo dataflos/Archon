@@ -1,6 +1,7 @@
 # Bun configuration for Remote Agentic Coding Platform
 
 [test]
+preload = ["./.github/diagnostics/operations.cjs"]
 # Only discover tests in packages/ - prevents finding duplicates in workspace/worktrees
 root = "./packages"
 # Coverage output
