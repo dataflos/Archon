@@ -18,6 +18,7 @@ resolve-scope: '{"errors":"false"}'
 review__mode: '{"continuation":false}'
 review__scope: "accepted contract recorded"
 review__code: "1 Important in-scope finding"
+review__codex: "0 findings (Codex second opinion stub)"
 review__seams: "0 findings"
 review__simplify: "0 findings"
 review__tests: "0 findings"

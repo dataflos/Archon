@@ -69,6 +69,7 @@ deliver__pr__pr: { repo: { host: "github.com", path: "example/repo" }, number: 3
 deliver__review__mode: '{"continuation":false}'
 deliver__review__scope: "PR diff in scope; head sha stubbed"
 deliver__review__code: "0 findings"
+deliver__review__codex: "0 findings (Codex second opinion stub)"
 deliver__review__seams: "0 findings"
 deliver__review__simplify: "0 findings"
 deliver__review__tests: "0 findings"

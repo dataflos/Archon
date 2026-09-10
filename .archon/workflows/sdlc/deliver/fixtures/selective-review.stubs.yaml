@@ -20,6 +20,7 @@ review__mode: '{"continuation":false}'
 review__scope:
   docs: false
 review__code: "0 findings"
+review__codex: "0 findings (Codex second opinion stub)"
 review__seams: "0 findings"
 review__simplify: "0 findings"
 review__tests: "0 findings"

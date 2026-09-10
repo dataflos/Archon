@@ -47,6 +47,7 @@ ship__deliver__resolve-scope: '{"errors":"false"}'
 ship__deliver__review__mode: '{"continuation":false}'
 ship__deliver__review__scope: { docs: false }
 ship__deliver__review__code: "stub"
+ship__deliver__review__codex: "0 findings (Codex second opinion stub)"
 ship__deliver__review__seams: "stub"
 ship__deliver__review__simplify: "stub"
 ship__deliver__review__tests: "stub"

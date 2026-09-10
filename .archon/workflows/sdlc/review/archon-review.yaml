@@ -1,7 +1,7 @@
 name: archon-review
 description: |
   Review a change through parallel specialist lenses and produce one evidence-based
-  verdict. On the first round, code, seams, simplify, and tests always run; errors are
+  verdict. On the first round, code, seams, simplify, tests, and codex always run; errors are
   selected for failure-path changes and docs only for shipped-doc changes. Reviews a PR when given one, otherwise the
   working diff. Advisory and read-only: it judges, it never edits. Given the
   previous round's report, one continuation reviewer verifies the prior findings,
@@ -106,6 +106,23 @@ nodes:
       max_attempts: 2
       delay_ms: 20000
 
+  # ── Second-opinion lens (Prometheus) ───────────────────────────────
+  # A generalist review on a different model family. Same diff, same evidence
+  # bar, cold read: it must not open the other lens files, so its findings are
+  # independent of Claude's. Codex ignores allowed_tools, so read-only is by
+  # prompt; the literal model keeps the node off the Claude tier presets.
+  - id: codex
+    command: review-codex
+    provider: codex
+    model: gpt-6-astra
+    effort: high
+    context: fresh
+    depends_on: [scope]
+    when: "$mode.output.continuation == false"
+    retry:
+      max_attempts: 2
+      delay_ms: 20000
+
   - id: errors
     command: review-errors
     context: fresh
@@ -130,7 +147,7 @@ nodes:
   # mode/scope preflight: synthesize separately requires scope to have succeeded.
   - id: review-complete
     bash: "true"
-    depends_on: [code, seams, simplify, tests, errors, docs]
+    depends_on: [code, seams, simplify, tests, codex, errors, docs]
     trigger_rule: all_done
 
   # A failed specialist (a provider stream dying mid-review, say) must not kill

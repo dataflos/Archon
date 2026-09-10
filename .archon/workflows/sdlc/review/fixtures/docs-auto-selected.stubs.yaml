@@ -5,6 +5,7 @@ mode: '{"continuation":false}'
 scope:
   docs: true
 code: "0 findings"
+codex: "0 findings (Codex second opinion stub)"
 seams: "0 findings"
 simplify: "0 findings"
 tests: "0 findings"

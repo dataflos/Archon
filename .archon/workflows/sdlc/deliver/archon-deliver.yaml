@@ -30,7 +30,7 @@ inputs:
       Cross-run review continuity: the previous delivery run's review report
       path. Round 1 then verifies prior findings (rejections included) instead
       of relitigating them from scratch. Empty on a first delivery.
-  # Error review can be forced on or off. Code, seams, simplify, and tests always run;
+  # Error review can be forced on or off. Code, seams, simplify, tests, and codex always run;
   # docs runs only when the classifier finds shipped documentation in the diff.
   errors:
     default: "auto"
