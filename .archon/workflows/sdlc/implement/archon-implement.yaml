@@ -9,7 +9,10 @@ description: |
   "apply these review findings", "build what this describes", "fix this CI failure".
   NOT for: deciding what to build, reviewing changes, or opening a PR.
 
-model: medium
+# large (Opus) rather than medium: on vela-obsidian every Sonnet-built delivery
+# needed at least one correction round for trust-boundary and sibling-path parity
+# defects the reviewers then reproduced (2026-09-12). Reviewers stay on medium.
+model: large
 
 inputs:
   work:
