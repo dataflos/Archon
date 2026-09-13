@@ -67,8 +67,14 @@ nodes:
       target: "$intake.output.target"
       publish: "$INPUTS.publish"
 
+  # Binding decides whether verification runs at all, so it gets the large tier.
+  # 2026-09-13, vela-obsidian run ec24a57d: after a repair round the medium-tier
+  # bind agent never ran its gh check; it polled its own run's status in the
+  # Archon database for 22 turns, returned delivered=false with the right head,
+  # and the retry verification was skipped on that flag.
   - id: candidate
     command: bind-delivered-pr
+    model: large
     context: fresh
     mutates_checkout: false
     depends_on: [ship]
@@ -127,6 +133,7 @@ nodes:
 
   - id: repaired-candidate
     command: bind-delivered-pr
+    model: large
     context: fresh
     mutates_checkout: false
     depends_on: [repair]
